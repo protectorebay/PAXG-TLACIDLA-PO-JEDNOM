@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>PAXG Rotating Change</title>
+<title>PAXG Stable Overlay</title>
 
 <style>
 html, body {
@@ -13,14 +13,12 @@ html, body {
     overflow: hidden;
 }
 
-/* CONTAINER */
 .container {
     position: absolute;
     top: 40px;
     left: 40px;
 }
 
-/* PANEL */
 .panel {
     background: #000;
 
@@ -33,29 +31,24 @@ html, body {
     font-weight: 900;
     color: white;
 
-    width: 900px; /* FIXED WIDTH */
+    width: 900px;
 
     opacity: 0;
     transform: translateX(-120px);
     transition: all 1s ease;
-
-    white-space: nowrap;
 }
 
-/* SHOW (zľava → doprava) */
 .panel.show {
     opacity: 1;
     transform: translateX(0);
 }
 
-/* HIDE (doprava 3s) */
 .panel.hide {
     opacity: 0;
     transform: translateX(200px);
     transition: all 3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* COLORS */
 .green { color: #40e100; }
 .red { color: #ff0000; }
 </style>
@@ -83,43 +76,54 @@ const periods = [
 let dataCache = [];
 let index = 0;
 
+// --- SAFE FETCH ---
+async function safeFetch(url) {
+    try {
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        return await r.json();
+    } catch {
+        return null;
+    }
+}
+
 // --- FETCH ---
 async function getCurrentPrice() {
-    const r = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT");
-    const d = await r.json();
-    return parseFloat(d.price);
+    const d = await safeFetch("https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT");
+    return d ? parseFloat(d.price) : null;
 }
 
 async function getPastPrice(h) {
     const now = Date.now();
     const past = now - h * 3600000;
 
-    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=1h&startTime=${past}&limit=1`);
-    const d = await r.json();
-
-    if (!d || !d[0]) return null;
-    return parseFloat(d[0][1]);
+    const d = await safeFetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=1h&startTime=${past}&limit=1`);
+    return (d && d[0]) ? parseFloat(d[0][1]) : null;
 }
 
-// --- UPDATE CACHE ---
+// --- UPDATE (SAFE) ---
 async function updateData() {
     const current = await getCurrentPrice();
-    dataCache = [];
+    if (!current) return; // keep old data
+
+    let newData = [];
 
     for (let p of periods) {
         const past = await getPastPrice(p.h);
 
-        if (!past) {
-            dataCache.push({ label: p.label, value: null });
-            continue;
-        }
+        if (!past) continue;
 
         const change = ((current - past) / past) * 100;
 
-        dataCache.push({
+        newData.push({
             label: p.label,
             value: change
         });
+    }
+
+    // update only if valid
+    if (newData.length > 0) {
+        dataCache = newData;
     }
 }
 
@@ -127,13 +131,13 @@ async function updateData() {
 function showItem(item) {
     if (!item) return;
 
-    const positive = item.value >= 0;
-    const colorClass = positive ? "green" : "red";
+    const val = item.value ?? 0;
+    const positive = val >= 0;
 
     panel.innerHTML = `
         ${item.label}
-        <span class="${colorClass}">
-            ${item.value !== null ? (positive ? "+" : "") + item.value.toFixed(2) + "%" : "--"}
+        <span class="${positive ? "green" : "red"}">
+            ${(positive ? "+" : "") + val.toFixed(2)}%
         </span>
     `;
 
@@ -141,7 +145,7 @@ function showItem(item) {
     panel.classList.add("show");
 }
 
-// --- ROTATION LOOP ---
+// --- ROTATION ---
 async function rotationLoop() {
     while (true) {
 
@@ -150,7 +154,7 @@ async function rotationLoop() {
             continue;
         }
 
-        const item = dataCache[index];
+        const item = dataCache[index % dataCache.length];
 
         showItem(item);
 
@@ -161,7 +165,7 @@ async function rotationLoop() {
 
         await sleep(3000);
 
-        index = (index + 1) % dataCache.length;
+        index++;
     }
 }
 
@@ -177,7 +181,6 @@ function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
 
-// start
 dataLoop();
 rotationLoop();
 </script>
