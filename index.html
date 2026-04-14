@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PAXG Rotating Change</title>
+
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+}
+
+/* CONTAINER */
+.container {
+    position: absolute;
+    top: 40px;
+    left: 40px;
+}
+
+/* PANEL */
+.panel {
+    background: #000;
+
+    border: 4px solid;
+    border-image: linear-gradient(to right, #000000, #292006) 1;
+
+    padding: 20px 40px;
+
+    font-size: 70px;
+    font-weight: 900;
+    color: white;
+
+    opacity: 0;
+    transform: translateX(120px);
+    transition: all 1s ease;
+
+    white-space: nowrap;
+}
+
+/* SHOW (slide from right) */
+.panel.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* HIDE (slide left 3s) */
+.panel.hide {
+    opacity: 0;
+    transform: translateX(-200px);
+    transition: all 3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* COLORS */
+.green { color: #40e100; }
+.red { color: #ff0000; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <div class="panel" id="panel">Loading...</div>
+</div>
+
+<script>
+const panel = document.getElementById("panel");
+
+const periods = [
+    {h: 6, label: "6H Change"},
+    {h: 12, label: "12H Change"},
+    {h: 24, label: "24H Change"},
+    {h: 48, label: "48H Change"},
+    {h: 72, label: "72H Change"},
+    {h: 168, label: "1W Change"},
+    {h: 720, label: "1M Change"},
+];
+
+let dataCache = [];
+let index = 0;
+
+// --- FETCH ---
+async function getCurrentPrice() {
+    const r = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT");
+    const d = await r.json();
+    return parseFloat(d.price);
+}
+
+async function getPastPrice(h) {
+    const now = Date.now();
+    const past = now - h * 3600000;
+
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=1h&startTime=${past}&limit=1`);
+    const d = await r.json();
+
+    if (!d || !d[0]) return null;
+    return parseFloat(d[0][1]);
+}
+
+// --- UPDATE CACHE (1x / 2 min) ---
+async function updateData() {
+    const current = await getCurrentPrice();
+    dataCache = [];
+
+    for (let p of periods) {
+        const past = await getPastPrice(p.h);
+
+        if (!past) {
+            dataCache.push({ label: p.label, value: null });
+            continue;
+        }
+
+        const change = ((current - past) / past) * 100;
+
+        dataCache.push({
+            label: p.label,
+            value: change
+        });
+    }
+}
+
+// --- DISPLAY ---
+function showItem(item) {
+    if (!item) return;
+
+    const positive = item.value >= 0;
+    const colorClass = positive ? "green" : "red";
+
+    panel.innerHTML = `
+        ${item.label}
+        <span class="${colorClass}">
+            ${item.value !== null ? (positive ? "+" : "") + item.value.toFixed(2) + "%" : "--"}
+        </span>
+    `;
+
+    panel.classList.remove("hide");
+    panel.classList.add("show");
+}
+
+// --- ROTATION LOOP ---
+async function rotationLoop() {
+    while (true) {
+
+        if (dataCache.length === 0) {
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+        }
+
+        const item = dataCache[index];
+
+        showItem(item);
+
+        await sleep(10000); // visible 10s
+
+        panel.classList.remove("show");
+        panel.classList.add("hide");
+
+        await sleep(3000); // hide animation
+
+        index = (index + 1) % dataCache.length;
+    }
+}
+
+// --- DATA LOOP (2 min refresh) ---
+async function dataLoop() {
+    while (true) {
+        await updateData();
+        await sleep(120000); // 2 min
+    }
+}
+
+function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+}
+
+// start
+dataLoop();
+rotationLoop();
+</script>
+
+</body>
+</html>
