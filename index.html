@@ -25,7 +25,7 @@ html, body {
     background: #000;
 
     border: 4px solid;
-    border-image: linear-gradient(to right, #000000, #292006) 1;
+    border-image: linear-gradient(to right, #000000, #3a2a0a) 1;
 
     padding: 20px 40px;
 
@@ -33,23 +33,25 @@ html, body {
     font-weight: 900;
     color: white;
 
+    width: 900px; /* FIXED WIDTH */
+
     opacity: 0;
-    transform: translateX(120px);
+    transform: translateX(-120px);
     transition: all 1s ease;
 
     white-space: nowrap;
 }
 
-/* SHOW (slide from right) */
+/* SHOW (zľava → doprava) */
 .panel.show {
     opacity: 1;
     transform: translateX(0);
 }
 
-/* HIDE (slide left 3s) */
+/* HIDE (doprava 3s) */
 .panel.hide {
     opacity: 0;
-    transform: translateX(-200px);
+    transform: translateX(200px);
     transition: all 3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -99,7 +101,7 @@ async function getPastPrice(h) {
     return parseFloat(d[0][1]);
 }
 
-// --- UPDATE CACHE (1x / 2 min) ---
+// --- UPDATE CACHE ---
 async function updateData() {
     const current = await getCurrentPrice();
     dataCache = [];
@@ -144,7 +146,7 @@ async function rotationLoop() {
     while (true) {
 
         if (dataCache.length === 0) {
-            await new Promise(r => setTimeout(r, 2000));
+            await sleep(2000);
             continue;
         }
 
@@ -152,22 +154,22 @@ async function rotationLoop() {
 
         showItem(item);
 
-        await sleep(10000); // visible 10s
+        await sleep(10000);
 
         panel.classList.remove("show");
         panel.classList.add("hide");
 
-        await sleep(3000); // hide animation
+        await sleep(3000);
 
         index = (index + 1) % dataCache.length;
     }
 }
 
-// --- DATA LOOP (2 min refresh) ---
+// --- DATA LOOP ---
 async function dataLoop() {
     while (true) {
         await updateData();
-        await sleep(120000); // 2 min
+        await sleep(120000);
     }
 }
 
